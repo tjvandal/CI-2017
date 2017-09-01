@@ -6,11 +6,13 @@ import tensorflow as tf
 import numpy as np
 
 class KerasMCDropout(Wrapper):
-    def __init__(self, layer, dropout_prob=0.0, is_mc_dropout=True, **kwargs):
+    def __init__(self, layer, dropout_prob=0.0, is_mc_dropout=True, alpha_divergence=False,
+		**kwargs):
         super(KerasMCDropout, self).__init__(layer, **kwargs)
         self.is_mc_dropout = is_mc_dropout
         self.supports_masking = True
         self.p = dropout_prob
+	self.alpha_divergence = alpha_divergence
 
     def build(self, input_shape=None):
         self.input_spec = InputSpec(shape=input_shape)
@@ -26,7 +28,6 @@ class KerasMCDropout(Wrapper):
         # add l2_loss
         regularizer = K.sum(K.square(weight)) * self.p
         self.layer.add_loss(regularizer)
-
         
     def compute_output_shape(self, input_shape):
         return self.layer.compute_output_shape(input_shape)
@@ -39,15 +40,11 @@ class KerasMCDropout(Wrapper):
         return x
 
     def call(self, inputs, training=None):
-        return self.layer.call(self.mc_dropout(inputs))
-        if self.is_mc_dropout:
-            return self.layer.call(self.mc_dropout(inputs))
-        else:
-            def relaxed_dropped_inputs():
-                return self.layer.call(self.mc_dropout(inputs))
-            return K.in_train_phase(relaxed_dropped_inputs,
-                                    self.layer.call(inputs),
-                                    training=training)
+	if self.alpha_divergence:
+	    return self.layer.call(self.mc_dropout(inputs))
+	else:
+	    return self.layer.call(self.mc_dropout(inputs))
+
 
 class ConcreteDropout(Wrapper):
     """This wrapper allows to learn the dropout probability for any given input layer.
